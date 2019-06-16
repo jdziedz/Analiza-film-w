@@ -1,0 +1,94 @@
+import requests
+from bs4 import BeautifulSoup
+import sqlite3
+from random import randint
+import time
+from time import sleep
+from IPython.core.display import clear_output
+
+start_time=time.time()
+reqs = 0
+
+db = sqlite3.connect("imdb.db")
+cursor = db.cursor()
+cursor.execute("DROP TABLE movies;")
+cursor.execute("CREATE TABLE movies (list_no, release_year, name text, lenght_min text, genre text,directors, actors, pub_rating text,crt_rating text, votes_no text, earned_USD text)")
+
+years = [str(i) for i in range(2000,2019)]
+pages = [str(i) for i in range(1,8)]
+
+for year_url in years:
+    url = 'https://www.imdb.com/search/title?release_date='+year_url+'&sort=num_votes,desc&page=1'
+    for page in pages:
+        sleep(randint(8,15)) #this is to make it appear for the serever as a human like (so the user IP wouldn't be banned)
+        reqs += 1
+        elapsed_time = time.time() - start_time
+        print('Request:{}; Frequency: {} requests/s'.format(reqs, reqs/elapsed_time))
+        clear_output(wait=True)
+        response = requests.get(url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        href = soup.find('a', class_='lister-page-next next-page')['href']
+        url = 'https://www.imdb.com'+href
+
+        for i in soup.find_all('div', class_ = 'lister-item-content'):
+            #print(i.prettify())
+            film_year = year_url
+            try:
+                listed_as = i.find('span', class_='lister-item-index unbold text-primary').text.replace(".","").strip()
+            except:
+                listed_as = "none"
+            try:
+                film_name = i.h3.a.text.strip()
+            except:
+                film_name = "none"
+            try:
+                film_details = i.find('p', class_='text-muted')
+            except:
+                film_details = "none"
+            try:
+                film_lenght = film_details.find('span', class_='runtime').text.replace(" min", "").strip()
+            except:
+                film_lenght = "none"
+            try:
+                film_genre = film_details.find('span', class_='genre').text.strip()
+            except:
+                film_genre = "none"
+            try:
+                public_rating = i.find('div', class_='ratings-bar').strong.text.strip()
+            except:
+                public_rating = "none"
+            try:
+                critics_rating = i.find('div', class_='inline-block ratings-metascore').span.text.strip()
+            except:
+                critics_rating = "none"
+            try:
+                votes_and_boxOffice = i.find('p', class_='sort-num_votes-visible')
+            except:
+                votes_and_boxOffice = "none"
+            try:
+                number_of_votes = votes_and_boxOffice.find_all('span', attrs = {'name':'nv'})
+            except:
+                number_of_votes = "none"
+            try:
+                number_of_votes_2 = number_of_votes[0]['data-value'].strip()
+            except:
+                number_of_votes_2 = "none"
+            try:
+                box_office = number_of_votes[1]['data-value'].replace(",","").strip()
+            except:
+                box_office = "none"
+            for item in i.select('p:contains("Stars:")'):
+                if item not in i.select('p:contains("Director:"), p:contains("Directors:")'):
+                    film_actors = str([d.text for d in item.select('a:not(span ~ a)')]).strip('[]').replace("'","")
+                    film_directors = 'none'
+                else:
+                    film_directors = str([d.text for d in item.select('a:not(span ~ a)')]).strip('[]').replace("'","")
+                    film_actors = str([d.text for d in item.select('span ~ a')]).strip('[]').replace("'","")
+            #print(film_name, film_year)
+            cursor.execute("INSERT INTO movies (list_no, release_year, name, lenght_min, genre,directors, actors, pub_rating,crt_rating, \
+votes_no, earned_USD) VALUES(?,?,?,?,?,?,?,?,?,?,?)",(listed_as,film_year,film_name,film_lenght,film_genre,film_directors, film_actors, public_rating, \
+                                                      critics_rating,number_of_votes_2,box_office))
+                                                
+            db.commit()
+print("DONE")
+        
